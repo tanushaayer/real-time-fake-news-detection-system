@@ -1,1 +1,1 @@
-# real-time-fake-news-detection-system
+# Real Time Fake News Detection System
