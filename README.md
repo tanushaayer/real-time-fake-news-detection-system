@@ -1,51 +1,16 @@
-# Real-Time Fake News Detection System
+﻿1. Docker Setup (docker-compose.yml)
+Configured the full Docker infrastructure for the project.
+Starts Zookeeper, Kafka, Spark, HBase and Dashboard with one command:
+docker compose up --build -d
 
-A real-time big data pipeline that continuously fetches news posts from Reddit and streams them into Apache Kafka for downstream processing and analytics.
+2. Live Dashboard (dashboard/dashboard.py)
+Built a Streamlit web app that shows fake news results in real time.
+Displays live metrics, charts and article feed.
+Auto-refreshes every 3 seconds.
+Open at http://localhost:8501
 
-## Pipeline
+3. Dashboard Container (dashboard/Dockerfile)
+Packaged the dashboard to run inside Docker.
 
-```text
-Reddit Feed
-    ↓
-Java Producer
-    ↓
-Apache Kafka
-```
-
-## Technologies Used
-
-- Java 17
-- Apache Kafka
-- Docker Compose
-- Maven
-- Reddit Public JSON Feed
-
-## How to Run
-
-From the root project folder:
-
-```bash
-docker compose up --build
-```
-
-This will automatically:
-
-- start Zookeeper
-- start Kafka
-- create the Kafka topic `news-stream`
-- start the Java Reddit producer
-
-## View Producer Logs
-
-```bash
-docker logs reddit-producer -f
-```
-
-## View Kafka Messages
-
-```bash
-docker exec -it kafka kafka-console-consumer \
-  --topic news-stream \
-  --bootstrap-server localhost:9092 \
-  --from-beginning
-```
+4. Dashboard Dependencies (dashboard/requirements.txt)
+Added required Python libraries for the dashboard.

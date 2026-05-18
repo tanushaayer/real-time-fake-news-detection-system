@@ -1,21 +1,36 @@
 version: "3.8"
 
+networks:
+  fakenews-net:
+    driver: bridge
+
+volumes:
+  kafka-data:
+  hbase-data:
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
     container_name: zookeeper
+    networks:
+      - fakenews-net
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
 
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: kafka
+    networks:
+      - fakenews-net
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -23,10 +38,13 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
   kafka-init:
     image: confluentinc/cp-kafka:7.6.1
     container_name: kafka-init
+    networks:
+      - fakenews-net
     depends_on:
       - kafka
     entrypoint: ["/bin/sh", "-c"]
@@ -45,20 +63,37 @@ services:
       echo 'Kafka topic news-stream is ready.'
       "
 
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    networks:
+      - fakenews-net
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: fakenews-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
   reddit-producer:
     build:
       context: ./pipeline
     container_name: reddit-producer
+    networks:
+      - fakenews-net
     depends_on:
       - kafka-init
     environment:
       KAFKA_BOOTSTRAP_SERVER: kafka:29092
       KAFKA_TOPIC: news-stream
-      REDDIT_URL: https://www.reddit.com/r/news+worldnews+technology+politics/new.json?limit=50
       FETCH_INTERVAL_MS: 10000
+
   spark-master:
     image: spark:3.5.1
     container_name: spark-master
+    networks:
+      - fakenews-net
     depends_on:
       - kafka
     command: >
@@ -73,10 +108,13 @@ services:
     volumes:
       - ./pipeline:/app/pipeline
       - ./outputs:/app/outputs
+      - ./data:/app/data
 
   spark-worker:
     image: spark:3.5.1
     container_name: spark-worker
+    networks:
+      - fakenews-net
     depends_on:
       - spark-master
     command: >
@@ -86,3 +124,31 @@ services:
     volumes:
       - ./pipeline:/app/pipeline
       - ./outputs:/app/outputs
+      - ./data:/app/data
+
+  hbase:
+    image: dajobe/hbase:latest
+    container_name: hbase
+    networks:
+      - fakenews-net
+    ports:
+      - "16010:16010"
+      - "16000:16000"
+      - "2182:2181"
+    volumes:
+      - hbase-data:/hbase-data
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: dashboard
+    networks:
+      - fakenews-net
+    depends_on:
+      - kafka
+    ports:
+      - "8501:8501"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: news-stream
