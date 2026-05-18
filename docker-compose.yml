@@ -54,5 +54,35 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVER: kafka:29092
       KAFKA_TOPIC: news-stream
-      REDDIT_URL: https://www.reddit.com/r/news/new.json?limit=25
+      REDDIT_URL: https://www.reddit.com/r/news+worldnews+technology+politics/new.json?limit=50
       FETCH_INTERVAL_MS: 10000
+  spark-master:
+    image: spark:3.5.1
+    container_name: spark-master
+    depends_on:
+      - kafka
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+      --host spark-master
+      --port 7077
+      --webui-port 8080
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./pipeline:/app/pipeline
+      - ./outputs:/app/outputs
+
+  spark-worker:
+    image: spark:3.5.1
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    volumes:
+      - ./pipeline:/app/pipeline
+      - ./outputs:/app/outputs

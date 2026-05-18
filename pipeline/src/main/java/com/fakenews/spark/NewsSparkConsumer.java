@@ -1,0 +1,57 @@
+package com.fakenews.spark;
+
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
+
+import static org.apache.spark.sql.functions.*;
+
+public class NewsSparkConsumer {
+
+    public static void main(String[] args) throws Exception {
+
+        String kafkaBootstrapServer = System.getenv()
+                .getOrDefault("KAFKA_BOOTSTRAP_SERVER", "kafka:29092");
+
+        String kafkaTopic = System.getenv()
+                .getOrDefault("KAFKA_TOPIC", "news-stream");
+
+        SparkSession spark = SparkSession.builder()
+                .appName("FakeNewsSparkStreaming")
+                .master("local[*]")
+                .getOrCreate();
+
+        spark.sparkContext().setLogLevel("WARN");
+
+        Dataset<Row> kafkaStream = spark.readStream()
+                .format("kafka")
+                .option("kafka.bootstrap.servers", kafkaBootstrapServer)
+                .option("subscribe", kafkaTopic)
+                .option("startingOffsets", "latest")
+                .load();
+
+        Dataset<Row> messages = kafkaStream
+                .selectExpr("CAST(value AS STRING) AS json_message");
+
+        Dataset<Row> parsed = messages
+                .select(
+                        get_json_object(col("json_message"), "$.id").alias("id"),
+                        get_json_object(col("json_message"), "$.source").alias("source"),
+                        get_json_object(col("json_message"), "$.subreddit").alias("subreddit"),
+                        get_json_object(col("json_message"), "$.title").alias("title"),
+                        get_json_object(col("json_message"), "$.author").alias("author"),
+                        get_json_object(col("json_message"), "$.score").alias("score"),
+                        get_json_object(col("json_message"), "$.num_comments").alias("num_comments"),
+                        get_json_object(col("json_message"), "$.url").alias("url"),
+                        get_json_object(col("json_message"), "$.permalink").alias("permalink"),
+                        get_json_object(col("json_message"), "$.ingested_at").alias("ingested_at")
+                );
+
+        parsed.writeStream()
+                .outputMode("append")
+                .format("console")
+                .option("truncate", false)
+                .start()
+                .awaitTermination();
+    }
+}
