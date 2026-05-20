@@ -1,78 +1,42 @@
 ﻿# Real-Time Fake News Detection System
 
-A real-time big data pipeline that fetches news posts from Reddit, streams them into Kafka, processes them with Spark Structured Streaming, and stores processed records in HBase.
+A distributed real-time fake news detection pipeline that streams live Reddit news using Apache Kafka, processes data with Spark Structured Streaming, classifies news using an NLP model, stores results in HBase, and visualizes analytics through a Streamlit dashboard.
 
-## Pipeline
+## Technologies Used
 
-```text
-Reddit Public Feeds
-        ↓
-Java Kafka Producer
-        ↓
-Apache Kafka
-        ↓
-Spark Structured Streaming
-        ↓
-HBase
-```
-
-## Technologies
-
-- Java 17
-- Maven
-- Docker Compose
+- Java
+- Python
 - Apache Kafka
-- Apache Spark
-- Apache HBase
-- Kafka UI
+- Apache Spark Structured Streaming
+- HBase
+- FastAPI
+- Hugging Face Transformers
+- Streamlit
+- Docker & Docker Compose
+- Reddit API
 
-## First-Time Setup
+## Architecture
 
-Clone the repository:
+Reddit API → Kafka Producer → Kafka Topic → Spark Structured Streaming → NLP Classifier → HBase → Streamlit Dashboard
+
+## Running the Project
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/tanushaayer/real-time-fake-news-detection-system.git
 cd real-time-fake-news-detection-system
 ```
 
-Build the project JAR:
+### 2. Start Docker Containers
 
 ```bash
-cd pipeline
-mvn clean package
-cd ..
-```
-
-Start all Docker services:
-
-```bash
-docker compose down -v
 docker compose up --build
 ```
 
-## Available UIs
+### 3. Create HBase Table
 
-Spark UI:
-
-```text
-http://localhost:8080
-```
-
-Kafka UI:
-
-```text
-http://localhost:8090
-```
-
-HBase UI:
-
-```text
-http://localhost:16010
-```
-
-## Create HBase Table
-
-Wait until HBase finishes starting. Then run:
+Open a new terminal:
 
 ```bash
 docker exec -it hbase hbase shell
@@ -82,69 +46,48 @@ Inside HBase shell:
 
 ```ruby
 create 'news_events', 'info'
-list
+```
+
+Exit shell:
+
+```ruby
 exit
 ```
 
-## Restart Spark Consumer
+### 4. Open Services
 
-After the HBase table is created:
+| Service | URL |
+|---|---|
+| Dashboard | http://localhost:8501 |
+| Kafka UI | http://localhost:8090 |
+| NLP Service Docs | http://localhost:8000/docs |
+| Spark Master UI | http://localhost:8080 |
+| HBase UI | http://localhost:16010 |
 
-```bash
-docker compose restart spark-consumer
-```
+## Replay Kafka Messages from Beginning
 
-Check Spark consumer logs:
-
-```bash
-docker logs spark-consumer -f
-```
-
-Expected output:
-
-```text
-Processing Spark batch...
-Wrote X records to HBase.
-```
-
-## Verify Kafka Messages
-
-Open Kafka UI:
-
-```text
-http://localhost:8090
-```
-
-Go to:
-
-```text
-Topics → news-stream → Messages
-```
-
-## Verify HBase Records
-
-Open HBase shell:
+Stop Spark consumer:
 
 ```bash
-docker exec -it hbase hbase shell
+docker stop spark-consumer
 ```
 
-Scan table:
+Delete checkpoint folder:
 
-```ruby
-scan 'news_events', {LIMIT => 10}
+### Windows PowerShell
+
+```powershell
+Remove-Item -Recurse -Force .\outputs\checkpoints\news-hbase
 ```
 
-You should see Reddit news records stored in HBase.
-
-## Stop the Project
+### Linux / Mac
 
 ```bash
-docker compose down
+rm -rf outputs/checkpoints/news-hbase
 ```
 
-Reset all data:
+Start Spark consumer again:
 
 ```bash
-docker compose down -v
+docker start spark-consumer
 ```
