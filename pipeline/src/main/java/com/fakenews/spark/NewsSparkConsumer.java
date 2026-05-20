@@ -36,6 +36,7 @@ public class NewsSparkConsumer {
                 .option("kafka.bootstrap.servers", kafkaBootstrapServer)
                 .option("subscribe", kafkaTopic)
                 .option("startingOffsets", "earliest")
+                .option("failOnDataLoss", "false")
                 .load();
 
         Dataset<Row> messages = kafkaStream.selectExpr(

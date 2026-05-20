@@ -1,6 +1,6 @@
 ﻿# Real-Time Fake News Detection System
 
-A real-time big data pipeline that fetches Reddit news posts, streams them into Kafka, processes them using Spark Structured Streaming, and stores processed records in HBase.
+A real-time big data pipeline that fetches news posts from Reddit, streams them into Kafka, processes them with Spark Structured Streaming, and stores processed records in HBase.
 
 ## Pipeline
 
@@ -43,25 +43,14 @@ mvn clean package
 cd ..
 ```
 
-Start all services:
+Start all Docker services:
 
 ```bash
 docker compose down -v
 docker compose up --build
 ```
 
-This starts:
-
-- Zookeeper
-- Kafka
-- Kafka UI
-- Reddit producer
-- Spark master
-- Spark worker
-- Spark consumer job
-- HBase
-
-## Useful URLs
+## Available UIs
 
 Spark UI:
 
@@ -83,42 +72,29 @@ http://localhost:16010
 
 ## Create HBase Table
 
-Open HBase shell:
+Wait until HBase finishes starting. Then run:
 
 ```bash
 docker exec -it hbase hbase shell
 ```
 
-Create table:
+Inside HBase shell:
 
 ```ruby
 create 'news_events', 'info'
-```
-
-Exit:
-
-```ruby
+list
 exit
 ```
 
-If the table already exists, skip this step.
+## Restart Spark Consumer
 
-## Check Producer Logs
+After the HBase table is created:
 
 ```bash
-docker logs reddit-producer -f
+docker compose restart spark-consumer
 ```
 
-Expected output:
-
-```text
-Sent to Kafka [news]: ...
-Sent to Kafka [worldnews]: ...
-Sent to Kafka [technology]: ...
-Sent to Kafka [politics]: ...
-```
-
-## Check Spark Consumer Logs
+Check Spark consumer logs:
 
 ```bash
 docker logs spark-consumer -f
@@ -127,11 +103,11 @@ docker logs spark-consumer -f
 Expected output:
 
 ```text
-Processing Spark batch: 0
-Wrote records to HBase.
+Processing Spark batch...
+Wrote X records to HBase.
 ```
 
-## View Kafka Messages
+## Verify Kafka Messages
 
 Open Kafka UI:
 
@@ -153,13 +129,15 @@ Open HBase shell:
 docker exec -it hbase hbase shell
 ```
 
-Scan stored records:
+Scan table:
 
 ```ruby
 scan 'news_events', {LIMIT => 10}
 ```
 
-## Stop Project
+You should see Reddit news records stored in HBase.
+
+## Stop the Project
 
 ```bash
 docker compose down

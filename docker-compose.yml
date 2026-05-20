@@ -138,6 +138,21 @@ services:
     volumes:
       - hbase-data:/hbase-data
 
+  hbase-init:
+    image: dajobe/hbase:latest
+    container_name: hbase-init
+    depends_on:
+      - hbase
+    networks:
+      - fakenews-net
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "
+      echo 'Waiting for HBase...' &&
+      sleep 40 &&
+      echo \"create 'news_events', 'info'\" | hbase shell -n
+      "
+
   spark-consumer:
     image: spark:3.5.1
     container_name: spark-consumer
@@ -165,6 +180,14 @@ services:
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.apache.hbase:hbase-client:1.2.6,org.apache.hbase:hbase-common:1.2.6
       target/reddit-fetcher-1.0-SNAPSHOT.jar
       "
+  nlp-service:
+    build:
+      context: ./nlp-service
+    container_name: nlp-service
+    networks:
+      - fakenews-net
+    ports:
+      - "8000:8000"
 
   dashboard:
     build:
