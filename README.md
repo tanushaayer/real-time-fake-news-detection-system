@@ -2,6 +2,8 @@
 
 A distributed real-time fake news detection pipeline that streams live Reddit news using Apache Kafka, processes data with Spark Structured Streaming, classifies news using an NLP model, stores results in HBase, and visualizes analytics through a Streamlit dashboard.
 
+---
+
 ## Technologies Used
 
 - Java
@@ -15,9 +17,13 @@ A distributed real-time fake news detection pipeline that streams live Reddit ne
 - Docker & Docker Compose
 - Reddit API
 
+---
+
 ## Architecture
 
 Reddit API → Kafka Producer → Kafka Topic → Spark Structured Streaming → NLP Classifier → HBase → Streamlit Dashboard
+
+---
 
 ## Running the Project
 
@@ -34,6 +40,10 @@ cd real-time-fake-news-detection-system
 docker compose up --build
 ```
 
+Wait around 30–60 seconds for all containers to start properly.
+
+---
+
 ### 3. Create HBase Table
 
 Open a new terminal:
@@ -48,11 +58,19 @@ Inside HBase shell:
 create 'news_events', 'info'
 ```
 
+Verify table creation:
+
+```ruby
+list
+```
+
 Exit shell:
 
 ```ruby
 exit
 ```
+
+---
 
 ### 4. Open Services
 
@@ -63,6 +81,31 @@ exit
 | NLP Service Docs | http://localhost:8000/docs |
 | Spark Master UI | http://localhost:8080 |
 | HBase UI | http://localhost:16010 |
+
+---
+
+## Verifying Data Flow
+
+### View Kafka Messages
+
+```bash
+docker exec -it kafka kafka-console-consumer --bootstrap-server kafka:29092 --topic news-stream --from-beginning
+```
+
+### View HBase Records
+
+```bash
+docker exec -it hbase hbase shell
+```
+
+Inside shell:
+
+```ruby
+count 'news_events'
+scan 'news_events', {LIMIT => 5}
+```
+
+---
 
 ## Replay Kafka Messages from Beginning
 
@@ -90,4 +133,22 @@ Start Spark consumer again:
 
 ```bash
 docker start spark-consumer
+```
+
+---
+
+## Note
+
+If the dashboard shows:
+
+```text
+No HBase records found yet
+```
+
+wait a few seconds for Spark to process Kafka messages.
+
+If needed, restart the Spark consumer:
+
+```bash
+docker restart spark-consumer
 ```
