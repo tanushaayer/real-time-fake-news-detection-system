@@ -18,77 +18,105 @@ public class HBaseNewsWriter implements Serializable {
     private static final String TABLE_NAME = "news_events";
     private static final String COLUMN_FAMILY = "info";
 
-    public static void writePartition(Iterator<Row> rows) throws Exception {
+    public static void writePartition(Iterator<Row> rows) {
 
-        Configuration config = HBaseConfiguration.create();
+        Connection connection = null;
+        Table table = null;
 
-        config.set("hbase.zookeeper.quorum", "hbase");
-        config.set("hbase.zookeeper.property.clientPort", "2181");
+        try {
 
-        Connection connection = ConnectionFactory.createConnection(config);
+            System.out.println("Connecting to HBase...");
 
-        Table table = connection.getTable(
-                TableName.valueOf(TABLE_NAME)
-        );
+            Configuration config = HBaseConfiguration.create();
 
-        List<Put> puts = new ArrayList<>();
+            config.set("hbase.zookeeper.quorum", "hbase");
+            config.set("hbase.zookeeper.property.clientPort", "2181");
 
-        while (rows.hasNext()) {
+            connection = ConnectionFactory.createConnection(config);
 
-            Row row = rows.next();
+            System.out.println("Connected to HBase.");
 
-            String id = getString(row, "id");
+            table = connection.getTable(TableName.valueOf(TABLE_NAME));
 
-            if (id == null || id.isEmpty()) {
-                continue;
+            List<Put> puts = new ArrayList<>();
+
+            while (rows.hasNext()) {
+
+                Row row = rows.next();
+
+                try {
+
+                    String id = getString(row, "id");
+                    String title = getString(row, "title");
+
+                    if (id == null || id.isEmpty()) {
+                        continue;
+                    }
+
+                    System.out.println("Classifying: " + title);
+
+                    NlpClassifierClient.ClassificationResult prediction =
+                            NlpClassifierClient.classify(title);
+
+                    Put put = new Put(Bytes.toBytes(id));
+
+                    addColumn(put, "id", id);
+                    addColumn(put, "source", getString(row, "source"));
+                    addColumn(put, "subreddit", getString(row, "subreddit"));
+                    addColumn(put, "title", title);
+                    addColumn(put, "author", getString(row, "author"));
+                    addColumn(put, "score", getString(row, "score"));
+                    addColumn(put, "num_comments", getString(row, "num_comments"));
+                    addColumn(put, "url", getString(row, "url"));
+                    addColumn(put, "permalink", getString(row, "permalink"));
+                    addColumn(put, "ingested_at", getString(row, "ingested_at"));
+
+                    addColumn(put, "prediction_label", prediction.label);
+
+                    addColumn(
+                            put,
+                            "prediction_confidence",
+                            String.valueOf(prediction.confidence)
+                    );
+
+                    puts.add(put);
+
+                    System.out.println("Prepared row: " + id);
+
+                } catch (Exception e) {
+
+                    System.out.println("ERROR processing row:");
+                    e.printStackTrace();
+                }
             }
 
-            String title = getString(row, "title");
+            if (!puts.isEmpty()) {
 
-            NlpClassifierClient.ClassificationResult prediction =
-                    NlpClassifierClient.classify(title);
+                System.out.println("Writing " + puts.size() + " rows to HBase...");
 
-            Put put = new Put(Bytes.toBytes(id));
+                table.put(puts);
 
-            addColumn(put, "id", id);
-            addColumn(put, "source", getString(row, "source"));
-            addColumn(put, "subreddit", getString(row, "subreddit"));
-            addColumn(put, "title", title);
-            addColumn(put, "author", getString(row, "author"));
-            addColumn(put, "score", getString(row, "score"));
-            addColumn(put, "num_comments", getString(row, "num_comments"));
-            addColumn(put, "url", getString(row, "url"));
-            addColumn(put, "permalink", getString(row, "permalink"));
-            addColumn(put, "ingested_at", getString(row, "ingested_at"));
+                System.out.println("SUCCESS: Wrote " + puts.size() + " rows to HBase.");
+            }
 
-            addColumn(put, "prediction_label", prediction.label);
+        } catch (Exception e) {
 
-            addColumn(
-                    put,
-                    "prediction_confidence",
-                    String.valueOf(prediction.confidence)
-            );
+            System.out.println("FATAL ERROR in HBase writer:");
+            e.printStackTrace();
 
-            puts.add(put);
+        } finally {
+
+            try {
+                if (table != null) table.close();
+            } catch (Exception ignored) {}
+
+            try {
+                if (connection != null) connection.close();
+            } catch (Exception ignored) {}
         }
-
-        if (!puts.isEmpty()) {
-            table.put(puts);
-
-            System.out.println(
-                    "Wrote " + puts.size() + " records to HBase."
-            );
-        }
-
-        table.close();
-        connection.close();
     }
 
-    private static void addColumn(
-            Put put,
-            String column,
-            String value
-    ) {
+    private static void addColumn(Put put, String column, String value) {
 
         if (value != null) {
 
@@ -106,9 +134,7 @@ public class HBaseNewsWriter implements Serializable {
 
             Object value = row.getAs(fieldName);
 
-            return value == null
-                    ? ""
-                    : value.toString();
+            return value == null ? "" : value.toString();
 
         } catch (Exception e) {
 

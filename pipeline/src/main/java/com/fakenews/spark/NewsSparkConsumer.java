@@ -29,7 +29,7 @@ public class NewsSparkConsumer {
                 .format("kafka")
                 .option("kafka.bootstrap.servers", "kafka:29092")
                 .option("subscribe", "news-stream")
-                .option("startingOffsets", "latest")
+                .option("startingOffsets", "earliest")
                 .option("failOnDataLoss", "false")
                 .load();
 

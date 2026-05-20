@@ -129,10 +129,25 @@ services:
       - fakenews-net
     ports:
       - "16010:16010"
-      - "16020:16020"
       - "16000:16000"
+      - "9090:9090"
       - "2182:2181"
 
+  hbase-init:
+    image: dajobe/hbase:latest
+    container_name: hbase-init
+    depends_on:
+      - hbase
+    networks:
+      - fakenews-net
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "
+      echo 'Waiting for HBase...' &&
+      sleep 40 &&
+      echo \"create_namespace 'default'\" | hbase shell -n || true &&
+      echo \"create 'news_events', 'info'\" | hbase shell -n || true
+      "
   nlp-service:
     build:
       context: ./nlp-service
@@ -183,9 +198,11 @@ services:
     networks:
       - fakenews-net
     depends_on:
-      - kafka
+      - hbase
     ports:
       - "8501:8501"
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_TOPIC: news-stream
+      HBASE_HOST: hbase
+      HBASE_PORT: 9090
+      HBASE_TABLE: news_events
+      REFRESH_SECONDS: 10
