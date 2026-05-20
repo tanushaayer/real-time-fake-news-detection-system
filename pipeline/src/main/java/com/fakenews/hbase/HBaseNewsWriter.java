@@ -1,12 +1,10 @@
 package com.fakenews.hbase;
 
+import com.fakenews.nlp.NlpClassifierClient;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.spark.sql.Row;
 
@@ -28,11 +26,15 @@ public class HBaseNewsWriter implements Serializable {
         config.set("hbase.zookeeper.property.clientPort", "2181");
 
         Connection connection = ConnectionFactory.createConnection(config);
-        Table table = connection.getTable(TableName.valueOf(TABLE_NAME));
+
+        Table table = connection.getTable(
+                TableName.valueOf(TABLE_NAME)
+        );
 
         List<Put> puts = new ArrayList<>();
 
         while (rows.hasNext()) {
+
             Row row = rows.next();
 
             String id = getString(row, "id");
@@ -41,12 +43,17 @@ public class HBaseNewsWriter implements Serializable {
                 continue;
             }
 
+            String title = getString(row, "title");
+
+            NlpClassifierClient.ClassificationResult prediction =
+                    NlpClassifierClient.classify(title);
+
             Put put = new Put(Bytes.toBytes(id));
 
-            addColumn(put, "id", getString(row, "id"));
+            addColumn(put, "id", id);
             addColumn(put, "source", getString(row, "source"));
             addColumn(put, "subreddit", getString(row, "subreddit"));
-            addColumn(put, "title", getString(row, "title"));
+            addColumn(put, "title", title);
             addColumn(put, "author", getString(row, "author"));
             addColumn(put, "score", getString(row, "score"));
             addColumn(put, "num_comments", getString(row, "num_comments"));
@@ -54,20 +61,37 @@ public class HBaseNewsWriter implements Serializable {
             addColumn(put, "permalink", getString(row, "permalink"));
             addColumn(put, "ingested_at", getString(row, "ingested_at"));
 
+            addColumn(put, "prediction_label", prediction.label);
+
+            addColumn(
+                    put,
+                    "prediction_confidence",
+                    String.valueOf(prediction.confidence)
+            );
+
             puts.add(put);
         }
 
         if (!puts.isEmpty()) {
             table.put(puts);
-            System.out.println("Wrote " + puts.size() + " records to HBase.");
+
+            System.out.println(
+                    "Wrote " + puts.size() + " records to HBase."
+            );
         }
 
         table.close();
         connection.close();
     }
 
-    private static void addColumn(Put put, String column, String value) {
+    private static void addColumn(
+            Put put,
+            String column,
+            String value
+    ) {
+
         if (value != null) {
+
             put.addColumn(
                     Bytes.toBytes(COLUMN_FAMILY),
                     Bytes.toBytes(column),
@@ -77,10 +101,17 @@ public class HBaseNewsWriter implements Serializable {
     }
 
     private static String getString(Row row, String fieldName) {
+
         try {
+
             Object value = row.getAs(fieldName);
-            return value == null ? "" : value.toString();
+
+            return value == null
+                    ? ""
+                    : value.toString();
+
         } catch (Exception e) {
+
             return "";
         }
     }

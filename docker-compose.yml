@@ -1,12 +1,9 @@
-version: "3.8"
-
 networks:
   fakenews-net:
     driver: bridge
 
 volumes:
   kafka-data:
-  hbase-data:
 
 services:
   zookeeper:
@@ -51,15 +48,13 @@ services:
     command: |
       "
       echo 'Waiting for Kafka...'
-      sleep 15
-
+      sleep 20
       kafka-topics --bootstrap-server kafka:29092 \
         --create \
         --if-not-exists \
         --topic news-stream \
         --partitions 1 \
         --replication-factor 1
-
       echo 'Kafka topic news-stream is ready.'
       "
 
@@ -127,31 +122,25 @@ services:
       - ./data:/app/data
 
   hbase:
-    image: dajobe/hbase:latest
+    image: harisekhon/hbase
     container_name: hbase
+    hostname: hbase
     networks:
       - fakenews-net
     ports:
       - "16010:16010"
+      - "16020:16020"
       - "16000:16000"
       - "2182:2181"
-    volumes:
-      - hbase-data:/hbase-data
 
-  hbase-init:
-    image: dajobe/hbase:latest
-    container_name: hbase-init
-    depends_on:
-      - hbase
+  nlp-service:
+    build:
+      context: ./nlp-service
+    container_name: nlp-service
     networks:
       - fakenews-net
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "
-      echo 'Waiting for HBase...' &&
-      sleep 40 &&
-      echo \"create 'news_events', 'info'\" | hbase shell -n
-      "
+    ports:
+      - "8000:8000"
 
   spark-consumer:
     image: spark:3.5.1
@@ -161,17 +150,22 @@ services:
     depends_on:
       - spark-master
       - spark-worker
-      - kafka
+      - kafka-init
       - hbase
+      - nlp-service
     volumes:
       - ./pipeline:/app/pipeline
       - ./outputs:/app/outputs
       - ./data:/app/data
     working_dir: /app/pipeline
+    environment:
+      KAFKA_BOOTSTRAP_SERVER: kafka:29092
+      KAFKA_TOPIC: news-stream
+      NLP_SERVICE_URL: http://nlp-service:8000/classify
     command: >
       /bin/bash -c "
-      echo 'Waiting for Spark, Kafka, and HBase...' &&
-      sleep 35 &&
+      echo 'Waiting for Spark, Kafka, HBase, and NLP service...' &&
+      sleep 90 &&
       mkdir -p /tmp/.ivy2/cache &&
       /opt/spark/bin/spark-submit
       --class com.fakenews.spark.NewsSparkConsumer
@@ -180,14 +174,6 @@ services:
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.apache.hbase:hbase-client:1.2.6,org.apache.hbase:hbase-common:1.2.6
       target/reddit-fetcher-1.0-SNAPSHOT.jar
       "
-  nlp-service:
-    build:
-      context: ./nlp-service
-    container_name: nlp-service
-    networks:
-      - fakenews-net
-    ports:
-      - "8000:8000"
 
   dashboard:
     build:

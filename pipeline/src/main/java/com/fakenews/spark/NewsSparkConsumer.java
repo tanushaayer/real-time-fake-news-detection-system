@@ -12,17 +12,11 @@ public class NewsSparkConsumer {
 
     public static void main(String[] args) throws Exception {
 
-        String kafkaBootstrapServer =
-                System.getenv().getOrDefault(
-                        "KAFKA_BOOTSTRAP_SERVER",
-                        "kafka:29092"
-                );
+        String kafkaBootstrapServer = "kafka:29092";
+        String kafkaTopic = "news-stream";
 
-        String kafkaTopic =
-                System.getenv().getOrDefault(
-                        "KAFKA_TOPIC",
-                        "news-stream"
-                );
+        System.out.println("Kafka Bootstrap Server: " + kafkaBootstrapServer);
+        System.out.println("Kafka Topic: " + kafkaTopic);
 
         SparkSession spark = SparkSession.builder()
                 .appName("FakeNewsSparkStreamingToHBase")
@@ -33,9 +27,9 @@ public class NewsSparkConsumer {
 
         Dataset<Row> kafkaStream = spark.readStream()
                 .format("kafka")
-                .option("kafka.bootstrap.servers", kafkaBootstrapServer)
-                .option("subscribe", kafkaTopic)
-                .option("startingOffsets", "earliest")
+                .option("kafka.bootstrap.servers", "kafka:29092")
+                .option("subscribe", "news-stream")
+                .option("startingOffsets", "latest")
                 .option("failOnDataLoss", "false")
                 .load();
 
@@ -60,9 +54,6 @@ public class NewsSparkConsumer {
                 .outputMode("append")
                 .foreachBatch((batchDF, batchId) -> {
                     System.out.println("Processing Spark batch: " + batchId);
-
-                    batchDF.show(false);
-
                     batchDF.foreachPartition(HBaseNewsWriter::writePartition);
                 })
                 .option("checkpointLocation", "/app/outputs/checkpoints/news-hbase")
