@@ -1,24 +1,32 @@
 package com.fakenews.spark;
 
+import com.fakenews.hbase.HBaseNewsWriter;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 
-import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.functions.get_json_object;
 
 public class NewsSparkConsumer {
 
     public static void main(String[] args) throws Exception {
 
-        String kafkaBootstrapServer = System.getenv()
-                .getOrDefault("KAFKA_BOOTSTRAP_SERVER", "kafka:29092");
+        String kafkaBootstrapServer =
+                System.getenv().getOrDefault(
+                        "KAFKA_BOOTSTRAP_SERVER",
+                        "kafka:29092"
+                );
 
-        String kafkaTopic = System.getenv()
-                .getOrDefault("KAFKA_TOPIC", "news-stream");
+        String kafkaTopic =
+                System.getenv().getOrDefault(
+                        "KAFKA_TOPIC",
+                        "news-stream"
+                );
 
         SparkSession spark = SparkSession.builder()
-                .appName("FakeNewsSparkStreaming")
-                .master("local[*]")
+                .appName("FakeNewsSparkStreamingToHBase")
+                .master("spark://spark-master:7077")
                 .getOrCreate();
 
         spark.sparkContext().setLogLevel("WARN");
@@ -27,30 +35,36 @@ public class NewsSparkConsumer {
                 .format("kafka")
                 .option("kafka.bootstrap.servers", kafkaBootstrapServer)
                 .option("subscribe", kafkaTopic)
-                .option("startingOffsets", "latest")
+                .option("startingOffsets", "earliest")
                 .load();
 
-        Dataset<Row> messages = kafkaStream
-                .selectExpr("CAST(value AS STRING) AS json_message");
+        Dataset<Row> messages = kafkaStream.selectExpr(
+                "CAST(value AS STRING) AS json_message"
+        );
 
-        Dataset<Row> parsed = messages
-                .select(
-                        get_json_object(col("json_message"), "$.id").alias("id"),
-                        get_json_object(col("json_message"), "$.source").alias("source"),
-                        get_json_object(col("json_message"), "$.subreddit").alias("subreddit"),
-                        get_json_object(col("json_message"), "$.title").alias("title"),
-                        get_json_object(col("json_message"), "$.author").alias("author"),
-                        get_json_object(col("json_message"), "$.score").alias("score"),
-                        get_json_object(col("json_message"), "$.num_comments").alias("num_comments"),
-                        get_json_object(col("json_message"), "$.url").alias("url"),
-                        get_json_object(col("json_message"), "$.permalink").alias("permalink"),
-                        get_json_object(col("json_message"), "$.ingested_at").alias("ingested_at")
-                );
+        Dataset<Row> parsed = messages.select(
+                get_json_object(col("json_message"), "$.id").alias("id"),
+                get_json_object(col("json_message"), "$.source").alias("source"),
+                get_json_object(col("json_message"), "$.subreddit").alias("subreddit"),
+                get_json_object(col("json_message"), "$.title").alias("title"),
+                get_json_object(col("json_message"), "$.author").alias("author"),
+                get_json_object(col("json_message"), "$.score").alias("score"),
+                get_json_object(col("json_message"), "$.num_comments").alias("num_comments"),
+                get_json_object(col("json_message"), "$.url").alias("url"),
+                get_json_object(col("json_message"), "$.permalink").alias("permalink"),
+                get_json_object(col("json_message"), "$.ingested_at").alias("ingested_at")
+        );
 
         parsed.writeStream()
                 .outputMode("append")
-                .format("console")
-                .option("truncate", false)
+                .foreachBatch((batchDF, batchId) -> {
+                    System.out.println("Processing Spark batch: " + batchId);
+
+                    batchDF.show(false);
+
+                    batchDF.foreachPartition(HBaseNewsWriter::writePartition);
+                })
+                .option("checkpointLocation", "/app/outputs/checkpoints/news-hbase")
                 .start()
                 .awaitTermination();
     }

@@ -138,6 +138,34 @@ services:
     volumes:
       - hbase-data:/hbase-data
 
+  spark-consumer:
+    image: spark:3.5.1
+    container_name: spark-consumer
+    networks:
+      - fakenews-net
+    depends_on:
+      - spark-master
+      - spark-worker
+      - kafka
+      - hbase
+    volumes:
+      - ./pipeline:/app/pipeline
+      - ./outputs:/app/outputs
+      - ./data:/app/data
+    working_dir: /app/pipeline
+    command: >
+      /bin/bash -c "
+      echo 'Waiting for Spark, Kafka, and HBase...' &&
+      sleep 35 &&
+      mkdir -p /tmp/.ivy2/cache &&
+      /opt/spark/bin/spark-submit
+      --class com.fakenews.spark.NewsSparkConsumer
+      --master spark://spark-master:7077
+      --conf spark.jars.ivy=/tmp/.ivy2
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.apache.hbase:hbase-client:1.2.6,org.apache.hbase:hbase-common:1.2.6
+      target/reddit-fetcher-1.0-SNAPSHOT.jar
+      "
+
   dashboard:
     build:
       context: ./dashboard
